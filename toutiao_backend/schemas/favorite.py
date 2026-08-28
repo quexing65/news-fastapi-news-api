@@ -13,14 +13,14 @@ class FavoriteAddRequest(BaseModel):
     news_id: int = Field(..., alias="newsId")
 
 
-# 规划两个类：一个新闻模型类 + 收藏的模型类
+# 规划两个类： 一个是新闻模型类 + 收藏的模型类
 class FavoriteNewsItemResponse(NewsItemBase):
     favorite_id: int = Field(alias="favoriteId")
     favorite_time: datetime = Field(alias="favoriteTime")
 
     model_config = ConfigDict(
         populate_by_name=True,
-        from_attributes=True,
+        from_attributes=True
     )
 
 
@@ -32,5 +32,5 @@ class FavoriteListResponse(BaseModel):
 
     model_config = ConfigDict(
         populate_by_name=True,
-        from_attributes=True,
+        from_attributes=True
     )

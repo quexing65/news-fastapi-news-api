@@ -25,12 +25,14 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(50), unique=True, nullable=False, comment="用户名")
     password: Mapped[str] = mapped_column(String(255), nullable=False, comment="密码（加密存储）")
     nickname: Mapped[Optional[str]] = mapped_column(String(50), comment="昵称")
-    avatar: Mapped[Optional[str]] = mapped_column(String(255), comment="头像URL", default='https://fastly.jsdelivr.net/npm/@vant/assets/cat.jpeg')
+    avatar: Mapped[Optional[str]] = mapped_column(String(255), comment="头像URL",
+                                                  default='https://fastly.jsdelivr.net/npm/@vant/assets/cat.jpeg')
     gender: Mapped[Optional[str]] = mapped_column(Enum('male', 'female', 'unknown'), comment="性别", default='unknown')
     bio: Mapped[Optional[str]] = mapped_column(String(500), comment="个人简介", default='这个人很懒，什么都没留下')
     phone: Mapped[Optional[str]] = mapped_column(String(20), unique=True, comment="手机号")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(), comment="创建时间")
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(), onupdate=datetime.now(), comment="更新时间")
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now(), onupdate=datetime.now(),
+                                                 comment="更新时间")
 
 
     def __repr__(self):

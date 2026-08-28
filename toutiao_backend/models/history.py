@@ -1,11 +1,12 @@
-from datetime import datetime
-
+from sqlalchemy.orm import Mapped, mapped_column,DeclarativeBase
 from sqlalchemy import Integer, DateTime, ForeignKey, Index
-from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime
+from .users import User
+from .news import News
 
-from models.users import User
-from models.news import News
-from models.favorite import Base
+
+class Base(DeclarativeBase):
+    pass
 
 
 class History(Base):
@@ -25,6 +26,7 @@ class History(Base):
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey(User.id), nullable=False, comment="用户ID")
     news_id: Mapped[int] = mapped_column(Integer, ForeignKey(News.id), nullable=False, comment="新闻ID")
     view_time: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, nullable=False, comment="浏览时间")
+
 
     def __repr__(self):
         return f"<History(id={self.id}, user_id={self.user_id}, news_id={self.news_id}, view_time={self.view_time})>"
