@@ -1,6 +1,5 @@
-from fastapi import Header, Depends, HTTPException
+from fastapi import Header, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette import status
 
 from config.db_conf import get_db
 from crud import users
@@ -12,7 +11,9 @@ async def get_current_user(
         db: AsyncSession = Depends(get_db)
 ):
     # Bearer xxxxx
+    # 写法一
     # token = authorization.split(" ")[1]
+    # 写法二
     token = authorization.replace("Bearer ", "")
     user = await users.get_user_by_token(db, token)
     if not user:
