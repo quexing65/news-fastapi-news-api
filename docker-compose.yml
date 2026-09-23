@@ -1,0 +1,25 @@
+# Kafka 单节点（KRaft 模式，无需 ZooKeeper）
+# 启动：docker compose up -d
+# 停止：docker compose down（加 -v 连数据卷一起删）
+#
+# 配置说明：apache/kafka 镜像自带一套开箱即用的单节点配置
+# （模板 /etc/kafka/docker/server.properties）：
+#   listeners=PLAINTEXT://:9092                容器内全接口监听
+#   advertised.listeners=PLAINTEXT://localhost:9092
+#                                              告诉客户端连 localhost:9092
+#   num.partitions=1、内部主题副本数=1          单节点必须为 1
+#   auto.create.topics.enable 默认开启          首条消息自动建 topic
+# 所以这里不需要任何 KAFKA_* 环境变量——宿主机上的生产者/消费者
+# 直接连 localhost:9092 即可（见 toutiao_backend/.env 的 KAFKA_BOOTSTRAP_SERVERS）。
+services:
+  kafka:
+    image: apache/kafka:3.9.0
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    volumes:
+      # 消息数据目录（模板 log.dirs=/tmp/kraft-combined-logs），持久化到命名卷
+      - kafka-data:/tmp/kraft-combined-logs
+
+volumes:
+  kafka-data:

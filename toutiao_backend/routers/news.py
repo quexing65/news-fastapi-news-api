@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.db_conf import get_db
 from crud import news_cache
+from mq.producer import publish_view_event
 
 # 创建 APIRouter 实例
 # prefix 路由前缀（API 接口规范文档）
@@ -58,9 +59,8 @@ async def get_news_detail(news_id: int = Query(..., alias="id"), db: AsyncSessio
     if not news_detail:
         raise HTTPException(status_code=404, detail="新闻不存在")
 
-    current_views = await news_cache.increase_news_views(db, news_detail.id, news_detail.category_id)
-    if current_views is None:
-        raise HTTPException(status_code=404, detail="新闻不存在")
+    # 浏览量走 Kafka 异步统计：只发事件立即返回，落库和清缓存由消费者攒批完成
+    await publish_view_event(news_detail.id, news_detail.category_id)
 
     related_news = await news_cache.get_related_news(db, news_detail.id, news_detail.category_id)
 
@@ -75,7 +75,8 @@ async def get_news_detail(news_id: int = Query(..., alias="id"), db: AsyncSessio
         "author": news_detail.author,
         "publishTime": news_detail.publish_time,
         "categoryId": news_detail.category_id,
-        "views": current_views,
+        # 落库有攒批延迟，先按乐观值展示本次浏览
+        "views": (news_detail.views or 0) + 1,
         "relatedNews": related_news
       }
     }

@@ -3,6 +3,7 @@ name = "toutiao-backend"
 version = "0.1.0"
 requires-python = ">=3.13"
 dependencies = [
+    "aiokafka>=0.14.0",
     "aiomysql>=0.3.2",
     "bcrypt<4.1",
     "fastapi>=0.138.1",

@@ -93,23 +93,19 @@ async def get_news_detail(db: AsyncSession, news_id: int):
     return news
 
 
-async def increase_news_views(db: AsyncSession, news_id: int, category_id: int):
-    stmt = update(News).where(News.id == news_id).values(views=News.views + 1)
-    result = await db.execute(stmt)
+async def batch_increase_news_views(db: AsyncSession, updates: dict[int, dict[str, int]]):
+    """攒批更新浏览量：updates = {news_id: {"count": 本次增量, "category_id": 分类id}}
+
+    同一篇新闻的 N 次浏览合并成一条 UPDATE，由 mq/view_consumer 消费后调用。
+    """
+    for news_id, info in updates.items():
+        stmt = update(News).where(News.id == news_id).values(views=News.views + info["count"])
+        await db.execute(stmt)
     await db.commit()
 
-    # 没有命中新闻时返回 None
-    if result.rowcount <= 0:
-        return None
-
-    # 查询更新后的真实浏览量
-    views_stmt = select(News.views).where(News.id == news_id)
-    views_result = await db.execute(views_stmt)
-    current_views = views_result.scalar_one_or_none()
-
-    # 浏览量会影响详情、列表及相关新闻排序，更新后清理旧缓存
-    await invalidate_news_views_cache(news_id, category_id)
-    return current_views
+    # 浏览量会影响详情、列表及相关新闻排序，落库后清理旧缓存
+    for news_id, info in updates.items():
+        await invalidate_news_views_cache(news_id, info["category_id"])
 
 
 async def get_related_news(db: AsyncSession, news_id: int, category_id: int, limit: int = 5):

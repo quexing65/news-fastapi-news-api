@@ -10,6 +10,7 @@
 | 语言/框架 | Python 3.13 / FastAPI / Uvicorn |
 | ORM / 数据库 | SQLAlchemy 2.0（异步）+ aiomysql / MySQL |
 | 缓存 | Redis 7（读写穿透缓存） |
+| 消息队列 | Apache Kafka 3.9（KRaft 单节点，aiokafka 客户端） |
 | 认证 | JWT + passlib(bcrypt) 密码加密 |
 | 数据校验 | Pydantic v2 |
 | 依赖管理 | uv（uv.lock 锁定版本） |
@@ -31,13 +32,17 @@ Vue 3 / Vite 7 / Vant 4 / Pinia（持久化）/ vue-router / vue-i18n（中英�
 ```
 Vue 3 前端  ──axios(REST /api/*)──▶  FastAPI 后端
                                         │
-                              ┌─────────┴─────────┐
-                              ▼                   ▼
-                          MySQL(业务数据)      Redis(缓存层)
+                      ┌─────────────────┼─────────────────┐
+                      ▼                 ▼                 ▼
+                  MySQL(业务数据)   Redis(缓存层)   Kafka(浏览量事件)
+                                                      │
+                                                      ▼
+                                        view_consumer(攒批落库进程)
 ```
 
-- **分层架构**：routers（路由）/ crud（数据操作）/ cache（缓存层）/ models（ORM）/ schemas（Pydantic 模型）五层职责分离
-- **Redis 读写穿透**：对分类、列表、总数、详情、相关新闻等热点数据做缓存，浏览量更新时同步失效缓存，降低数据库压力
+- **分层架构**：routers（路由）/ crud（数据操作）/ cache（缓存层）/ mq（消息队列）/ models（ORM）/ schemas（Pydantic 模型）六层职责分离
+- **Redis 读写穿透**：对分类、列表、总数、详情、相关新闻等热点数据做缓存，浏览量落库后同步失效缓存，降低数据库压力
+- **Kafka 异步浏览量**：详情接口只发浏览量事件立即返回（请求路径零数据库写入），独立消费者进程每 3 秒 / 500 条攒批落库（N 次浏览合并为一条 `views = views + N`），削平写入热点；at-least-once 语义，消息不丢
 - **统一响应格式**：所有接口返回 `{code, message, data}`，注册全局异常处理器
 - **鉴权依赖注入**：`get_current_user` 作为 FastAPI 依赖，保护私有接口
 
@@ -65,23 +70,30 @@ Vue 3 前端  ──axios(REST /api/*)──▶  FastAPI 后端
 ### 环境要求
 - Python 3.13+（推荐使用 [uv](https://docs.astral.sh/uv/) 管理）
 - MySQL 8.x、Redis 7.x
+- Kafka 3.x（Docker 一键启动，见下）
 
 ### 后端
 
 ```bash
 cd toutiao_backend
 
-# 1. 安装依赖
+# 1. 启动 Kafka（仓库根目录，单节点 KRaft）
+cd .. && docker compose up -d && cd toutiao_backend
+
+# 2. 安装依赖
 uv sync
 
-# 2. 配置数据库连接
+# 3. 配置数据库连接
 cp .env.example .env
 # 编辑 .env，填入你的 MySQL 账号密码
 
-# 3. 初始化数据库表（models/ 下的 ORM 模型，按需执行建表）
+# 4. 初始化数据库表（models/ 下的 ORM 模型，按需执行建表）
 
-# 4. 启动服务（默认 8000 端口）
+# 5. 启动服务（默认 8000 端口）
 uv run uvicorn main:app --reload --host 127.0.0.1 --port 8000
+
+# 6. 另开终端，启动浏览量消费者（攒批落库进程）
+uv run python -m mq.view_consumer
 ```
 
 ### 前端
@@ -97,6 +109,7 @@ npm run dev   # 默认 5173 端口
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `ASYNC_DATABASE_URL` | MySQL 连接串 | `mysql+aiomysql://root@localhost:3306/news_app?charset=utf8mb4` |
+| `KAFKA_BOOTSTRAP_SERVERS` | Kafka 连接地址 | `localhost:9092` |
 
 前端 AI 问答需配置 `xwzx-news/.env.local` 中的 `VITE_AI_API_KEY`（阿里云百炼 Key）。
 
@@ -104,14 +117,16 @@ npm run dev   # 默认 5173 端口
 
 ```
 toutiao-AI/
+├── docker-compose.yml        # Kafka 单节点（KRaft）
 ├── toutiao_backend/          # FastAPI 后端
-│   ├── main.py               # 应用入口
+│   ├── main.py               # 应用入口（Kafka producer 生命周期）
 │   ├── routers/              # API 路由（news/users/favorite/history）
 │   ├── crud/                 # 数据操作层
 │   ├── cache/                # Redis 缓存层
+│   ├── mq/                   # Kafka 生产者 / 浏览量消费者
 │   ├── models/               # SQLAlchemy ORM 模型
 │   ├── schemas/              # Pydantic 请求/响应模型
-│   ├── config/               # 数据库 / 缓存配置
+│   ├── config/               # 数据库 / 缓存 / Kafka 配置
 │   └── utils/                # JWT 认证、异常处理、统一响应
 └── xwzx-news/                # Vue 3 前端
 ```

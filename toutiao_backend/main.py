@@ -1,10 +1,21 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from routers import news, users, favorite, history
 from fastapi.middleware.cors import CORSMiddleware
 
+from mq.producer import start_producer, stop_producer
 from utils.exception_handlers import register_exception_handlers
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await start_producer()
+    yield
+    await stop_producer()
+
+
+app = FastAPI(lifespan=lifespan)
 
 # 注册异常处理器
 register_exception_handlers(app)
