@@ -1,18 +1,24 @@
-import uuid
-from datetime import datetime, timedelta
+from cache.user_cache import invalidate_user_info
+from models.users import User
+from schemas.users import UserRequest, UserUpdateRequest
+from utils import security
+from utils.jwt_util import create_token as jwt_create_token
 
 from fastapi import HTTPException
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.users import User, UserToken
-from schemas.users import UserRequest, UserUpdateRequest
-from utils import security
-
 
 # 根据用户名查询数据库
 async def get_user_by_username(db: AsyncSession, username: str):
     query = select(User).where(User.username == username)
+    result = await db.execute(query)
+    return result.scalar_one_or_none()
+
+
+# 根据用户ID查询数据库
+async def get_user_by_id(db: AsyncSession, user_id: int):
+    query = select(User).where(User.id == user_id)
     result = await db.execute(query)
     return result.scalar_one_or_none()
 
@@ -28,25 +34,9 @@ async def create_user(db: AsyncSession, user_data: UserRequest):
     return user
 
 
-# 生成 Token
-async def create_token(db: AsyncSession, user_id: int):
-    # 生成 Token + 设置过期时间 → 查询数据库当前用户是否有 Token → 有：更新；没有：添加
-    token = str(uuid.uuid4())
-    # timedelta(days=7, hours=2, minutes=30, seconds=10)
-    expires_at = datetime.now() + timedelta(days=7)
-    query = select(UserToken).where(UserToken.user_id == user_id)
-    result = await db.execute(query)
-    user_token = result.scalar_one_or_none()
-
-    if user_token:
-        user_token.token = token
-        user_token.expires_at = expires_at
-    else:
-        user_token = UserToken(user_id=user_id, token=token, expires_at=expires_at)
-        db.add(user_token)
-        await db.commit()
-
-    return token
+# 生成 JWT Token（无状态，不存储到数据库）
+def create_token(user_id: int, username: str):
+    return jwt_create_token(user_id, username)
 
 
 async def authenticate_user(db: AsyncSession, username: str, password: str):
@@ -57,20 +47,6 @@ async def authenticate_user(db: AsyncSession, username: str, password: str):
         return None
 
     return user
-
-
-# 根据 Token 查询用户：验证 Token → 查询用户
-async def get_user_by_token(db: AsyncSession, token: str):
-    query = select(UserToken).where(UserToken.token == token)
-    result = await db.execute(query)
-    db_token = result.scalar_one_or_none()
-
-    if not db_token or db_token.expires_at < datetime.now():
-        return None
-
-    query = select(User).where(User.id == db_token.user_id)
-    result = await db.execute(query)
-    return result.scalar_one_or_none()
 
 
 # 更新用户信息: update更新 → 检查是否命中 → 获取更新后的用户返回
@@ -91,6 +67,9 @@ async def update_user(db: AsyncSession, username: str, user_data: UserUpdateRequ
 
     # 获取一下更新后的用户
     updated_user = await get_user_by_username(db, username)
+
+    # 用户信息变更后清除缓存
+    await invalidate_user_info(updated_user.id)
     return updated_user
 
 
@@ -106,4 +85,7 @@ async def change_password(db: AsyncSession, user: User, old_password: str, new_p
     db.add(user)
     await db.commit()
     await db.refresh(user)
+
+    # 修改密码后清除用户信息缓存
+    await invalidate_user_info(user.id)
     return True

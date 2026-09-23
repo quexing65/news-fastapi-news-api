@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import select, func, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cache.history_cache import invalidate_history_cache
 from models.history import History
 from models.news import News
 
@@ -18,12 +19,18 @@ async def add_history(db: AsyncSession, user_id: int, news_id: int):
         existing_history.view_time = datetime.now()
         await db.commit()
         await db.refresh(existing_history)
+
+        # 历史变更后清除该用户的历史列表缓存
+        await invalidate_history_cache(user_id)
         return existing_history
     else:
         history = History(user_id=user_id, news_id=news_id)
         db.add(history)
         await db.commit()
         await db.refresh(history)
+
+        # 历史变更后清除该用户的历史列表缓存
+        await invalidate_history_cache(user_id)
         return history
 
 
@@ -52,6 +59,8 @@ async def delete_history(db: AsyncSession, user_id: int, news_id: int):
     result = await db.execute(query)
     await db.commit()
 
+    # 历史变更后清除该用户的历史列表缓存
+    await invalidate_history_cache(user_id)
     return result.rowcount > 0
 
 
@@ -63,4 +72,6 @@ async def clear_history(db: AsyncSession, user_id: int):
     result = await db.execute(query)
     await db.commit()
 
+    # 清空历史后清除该用户的历史列表缓存
+    await invalidate_history_cache(user_id)
     return result.rowcount or 0

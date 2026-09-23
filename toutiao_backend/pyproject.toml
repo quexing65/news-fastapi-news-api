@@ -7,6 +7,7 @@ dependencies = [
     "bcrypt<4.1",
     "fastapi>=0.138.1",
     "passlib[bcrypt]==1.7.4",
+    "pyjwt>=2.14.0",
     "python-dotenv>=1.2.1",
     "redis==7.1.0",
     "sqlalchemy[asyncio]>=2.0.51",

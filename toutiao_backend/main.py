@@ -28,3 +28,7 @@ app.include_router(news.router)
 app.include_router(users.router)
 app.include_router(favorite.router)
 app.include_router(history.router)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", reload=True, host="127.0.0.1", port=8000)

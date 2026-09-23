@@ -33,7 +33,7 @@ async def get_json_cache(key: str):
     try:
         data = await redis_client.get(key)
         if data:
-            return json.loads(data)  # 序列化
+            return json.loads(data)  # 反序列化：JSON 字符串 → Python 对象
         return None
     except Exception as e:
         print(f"获取 JSON 缓存失败：{e}")

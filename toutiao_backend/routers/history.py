@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from cache.history_cache import get_cached_history_list, set_cached_history_list
 from config.db_conf import get_db
 from crud import history
 from models.users import User
@@ -31,6 +33,11 @@ async def get_history_list(page: int = Query(1, ge=1),
     """
     获取历史记录列表
     """
+    # 先尝试从缓存获取历史记录
+    cached_data = await get_cached_history_list(user.id, page, page_size)
+    if cached_data is not None:
+        return success_response(data=cached_data)
+
     rows, total = await history.get_history_list(db, user.id, page, page_size)
 
     has_more = total > page * page_size
@@ -43,6 +50,8 @@ async def get_history_list(page: int = Query(1, ge=1),
 
     data = HistoryListResponse(list=history_list, total=total, hasMore=has_more)
 
+    # 写入缓存
+    await set_cached_history_list(user.id, page, page_size, jsonable_encoder(data))
     return success_response(data=data)
 
 

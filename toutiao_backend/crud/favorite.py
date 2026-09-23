@@ -1,6 +1,7 @@
 from sqlalchemy import select, delete, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cache.favorite_cache import invalidate_favorite_cache
 from models.favorite import Favorite
 from models.news import News
 
@@ -26,6 +27,9 @@ async def add_news_favorite(
     db.add(favorite)
     await db.commit()
     await db.refresh(favorite)
+
+    # 收藏变更后清除该用户的收藏列表缓存
+    await invalidate_favorite_cache(user_id)
     return favorite
 
 
@@ -37,6 +41,9 @@ async def remove_news_favorite(
     stmt = delete(Favorite).where(Favorite.user_id == user_id, Favorite.news_id == news_id)
     result = await db.execute(stmt)
     await db.commit()
+
+    # 收藏变更后清除该用户的收藏列表缓存
+    await invalidate_favorite_cache(user_id)
     return result.rowcount > 0
 
 
@@ -78,6 +85,9 @@ async def remove_all_favorites(
     stmt = delete(Favorite).where(Favorite.user_id == user_id)
     result = await db.execute(stmt)
     await db.commit()
+
+    # 清空收藏后清除该用户的收藏列表缓存
+    await invalidate_favorite_cache(user_id)
 
     # 返回一个删除的数量
     return result.rowcount or 0

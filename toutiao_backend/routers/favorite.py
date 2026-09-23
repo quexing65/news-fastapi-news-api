@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Query, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from cache.favorite_cache import get_cached_favorite_list, set_cached_favorite_list
 from config.db_conf import get_db
 from models.users import User
 from schemas.favorite import FavoriteCheckResponse, FavoriteAddRequest, FavoriteListResponse
@@ -51,6 +53,11 @@ async def get_favorite_list(
         user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db)
 ):
+    # 先尝试从缓存获取收藏列表
+    cached_data = await get_cached_favorite_list(user.id, page, page_size)
+    if cached_data is not None:
+        return success_response(message="获取收藏列表成功", data=cached_data)
+
     rows, total = await favorite.get_favorite_list(db, user.id, page, page_size)
     favorite_list = [{
         **news.__dict__,
@@ -60,6 +67,8 @@ async def get_favorite_list(
     has_more = total > page * page_size
 
     data = FavoriteListResponse(list=favorite_list, total=total, hasMore=has_more)
+    # 写入缓存
+    await set_cached_favorite_list(user.id, page, page_size, jsonable_encoder(data))
     return success_response(message="获取收藏列表成功", data=data)
 
 

@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
+from cache.user_cache import get_cached_user_info, set_cached_user_info
 from models.users import User
 from schemas.users import UserRequest, UserAuthResponse, UserInfoResponse, UserUpdateRequest, UserChangePasswordRequest
 
@@ -20,7 +22,7 @@ async def register(user_data: UserRequest, db: AsyncSession = Depends(get_db)): 
     if existing_user:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="用户已存在")
     user = await users.create_user(db, user_data)
-    token = await users.create_token(db, user.id)
+    token = users.create_token(user.id, user.username)
     # return {
     #   "code": 200,
     #   "message": "注册成功",
@@ -44,7 +46,7 @@ async def login(user_data: UserRequest, db: AsyncSession = Depends(get_db)):
     user = await users.authenticate_user(db, user_data.username, user_data.password)
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户名或密码错误")
-    token = await users.create_token(db, user.id)
+    token = users.create_token(user.id, user.username)
     response_data = UserAuthResponse(token=token, user_info=UserInfoResponse.model_validate(user))
     return success_response(message="登录成功啦", data=response_data)
 
@@ -52,7 +54,15 @@ async def login(user_data: UserRequest, db: AsyncSession = Depends(get_db)):
 # 查Token查用户 → 封装crud → 功能整合成一个工具函数 → 路由导入使用: 依赖注入
 @router.get("/info")
 async def get_user_info(user: User = Depends(get_current_user)):
-    return success_response(message="获取用户信息成功", data=UserInfoResponse.model_validate(user))
+    # 先尝试从缓存获取用户信息
+    cached_info = await get_cached_user_info(user.id)
+    if cached_info is not None:
+        return success_response(message="获取用户信息成功", data=cached_info)
+
+    user_data = UserInfoResponse.model_validate(user)
+    # 写入缓存
+    await set_cached_user_info(user.id, jsonable_encoder(user_data))
+    return success_response(message="获取用户信息成功", data=user_data)
 
 
 # 修改用户信息：验证Token → 更新（用户输入数据 put 提交 → 请求体参数 → 定义Pydantic模型类） → 响应结果
